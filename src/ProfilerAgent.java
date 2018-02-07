@@ -10,7 +10,6 @@ public class ProfilerAgent {
     //private static final int MAX_PATH = 1024;
 
     public static void premain(String args) {
-        usage();
         String procName = ManagementFactory.getRuntimeMXBean().getName();
         int pid = Integer.parseInt(procName.substring(0, procName.indexOf("@")));
         int optind = 1;
@@ -20,22 +19,75 @@ public class ProfilerAgent {
         String action = "collect";
         String mode = "cpu";
         int duration = 60;
-        String file = "";
-        boolean useTMP = true;
-        int interval;
-        int framebuf;
+        String file = "/tmp/async-profiler.log";
+        int interval = 0;
+        int framebuf = 0;
         String output = "summary,traces=200,flat=200";
+        String[] buf = null;
+
+        JavaAPI ja = new JavaAPI();
 
         Scanner in = new Scanner(System.in);
-        if(in.hasNextLine())
-            in.nextLine().split(" ");
+        while (true) {
+            if (in.hasNextLine()) buf = in.nextLine().split(" ");
+            if(buf == null) continue;
 
-        show_agent_output(useTMP, file);
+            for (int i = 1; i < buf.length; i += 2) {
+                switch (buf[i]) {
+                    case "-h":
+                        usage();
+                        break;
+                    case "-m":
+                        mode = buf[i+1];
+                        break;
+                    case "-d":
+                        duration = Integer.parseInt(buf[i+1]);
+                        break;
+                    case "-f":
+                        file = buf[i+1];
+                        break;
+                    case "-i":
+                        interval = Integer.parseInt(buf[i+1]);
+                        break;
+                    case "-b":
+                        framebuf = Integer.parseInt(buf[i+1]);
+                        break;
+                    case "-o":
+                        output = buf[i+1];
+                        break;
+                    default:
+                        System.out.println("Unrecognized option:" + buf[i] + ' ' + buf[i+1]);
+                        usage();
+                        return;
+                }
+            }
+
+            action = buf[0];
+            switch (action) {
+                case "start":
+                    ja.start(mode, file, interval, framebuf);
+                    break;
+                case "stop":
+                    ja.stop(file, output);
+                    break;
+                case "status":
+                    ja.status(file);
+                    break;
+                case "collect":
+                    ja.start(mode, file, interval, framebuf);
+                    show_agent_output(file);
+                    ja.stop(file, output);
+                    break;
+                default:
+            }
+
+            show_agent_output(file);
+            buf = null;
+        }
     }
 
     private static final void usage() {
-        System.out.println("Usage: $0 [action] [options] <pid>\n" + "Actions:\n" +
-                "  start             start profiling and return immediately" +
+        System.out.println("Usage: $0 [action] [options]\n" + "Actions:\n" +
                 "  start             start profiling and return immediately" +
                 "  stop              stop profiling" +
                 "  status            print profiling status" +
@@ -49,17 +101,15 @@ public class ProfilerAgent {
                 "  -b bufsize        frame buffer size" +
                 "  -o fmt[,fmt...]   output format: summary|traces|flat|collapsed" +
                 "" +
-                "Example: $0 -d 30 -f profile.fg -o collapsed 3456" +
-                "         $0 start -i 999000 3456" +
-                "         $0 stop -o summary,flat 3456");
+                "Example: $0 -d 30 -f profile.fg -o collapsed\n" +
+                "         $0 start -i 999000\n" +
+                "         $0 stop -o summary,flat\n");
     }
 
-    private static void show_agent_output(boolean useTMP, String file) {
-        if(useTMP){
-            try{
-                Files.lines(Paths.get(file), StandardCharsets.UTF_8).forEach(System.out::println);
-            }catch (IOException e){}
-        }
+    private static void show_agent_output(String file) {
+        try{
+            Files.lines(Paths.get(file), StandardCharsets.UTF_8).forEach(System.out::println);
+        }catch (IOException e){}
     }
 
     //static String get_temp_directory() {
